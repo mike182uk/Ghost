@@ -1,0 +1,13 @@
+/apps/admin-x-demo @admin-x
+/apps/admin-x-design-system @admin-x
+/apps/admin-x-framework @admin-x
+/apps/admin-x-settings @admin-x
+/apps/comments-ui TODO
+/apps/portal @growth
+/apps/signup-form @growth
+/apps/sodo-search TODO
+/ghost/adapter-cache-redis @arch
+/ghost/milestones @buisness
+/ghost/offers @growth
+/ghost/core/core/server/api/endpoints/members.js @growth
+
