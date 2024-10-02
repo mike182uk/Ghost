@@ -58,18 +58,149 @@ const APReplyBox: React.FC<APTextAreaProps> = ({
         if (!textValue) {
             return;
         }
-        await replyMutation.mutate({id: object.id, content: textValue}, {
-            onSuccess(activity: Activity) {
-                setTextValue('');
-                showToast({
-                    message: 'Reply sent',
-                    type: 'success'
-                });
-                if (onNewReply) {
-                    onNewReply(activity);
+
+        const fakeReply = {
+            cc: 'https://foo.bar/users/foobarbaz/followers',
+            id: `https://foo.bar/${Date.now()}/activity`,
+            to: 'as:Public',
+            type: 'Create',
+            actor: {
+                id: 'https://foo.bar/users/foobarbaz',
+                url: 'https://foo.bar/users/foobarbaz',
+                name: 'Foo Bar Baz',
+                type: 'Person',
+                inbox: 'https://foo.bar/users/foobarbaz/inbox',
+                outbox: 'https://foo.bar/users/foobarbaz/outbox',
+                summary: '',
+                endpoints: {
+                    type: 'as:Endpoints',
+                    sharedInbox: 'https:/foo.bar/inbox'
+                },
+                followers: 'https://foo.bar/users/foobarbaz/followers',
+                following: 'https://foo.bar/users/foobarbaz/following',
+                published: new Date().toISOString(),
+                'toot:featured': {
+                    id: 'https://foo.bar/users/foobarbaz/collections/featured'
+                },
+                preferredUsername: 'foobarbaz',
+                'toot:discoverable': false,
+                'toot:featuredTags': {
+                    id: 'https://foo.bar/users/foobarbaz/collections/tags'
+                },
+                'as:manuallyApprovesFollowers': false,
+                'https://w3id.org/security#publicKey': {
+                    id: 'https://foo.bar/users/foobarbaz#main-key',
+                    type: 'https://w3id.org/security#Key',
+                    'https://w3id.org/security#owner': {
+                        id: 'https://foo.bar/users/foobarbaz'
+                    },
+                    'https://w3id.org/security#publicKeyPem': 'abc123'
                 }
-            }
+            },
+            object: {
+                cc: 'https://foo.bar/users/foobarbaz/followers',
+                id: `https://foo.bar/${Date.now()}`,
+                to: 'as:Public',
+                url: `https://foo.bar/${Date.now()}`,
+                type: 'Note',
+                content: textValue,
+                replies: [],
+                inReplyTo: object.id,
+                published: new Date().toISOString(),
+                sensitive: false,
+                contentMap: {
+                    en: textValue
+                },
+                attributedTo: {
+                    id: 'https://foo.bar/users/foobarbaz',
+                    url: 'https://foo.bar/users/foobarbaz',
+                    name: 'Foo Bar Baz',
+                    type: 'Person',
+                    inbox: 'https://foo.bar/users/foobarbaz/inbox',
+                    outbox: 'https://foo.bar/users/foobarbaz/outbox',
+                    summary: '',
+                    '@context': [
+                        'https://www.w3.org/ns/activitystreams',
+                        'https://w3id.org/security/v1',
+                        'https://w3id.org/security/data-integrity/v1',
+                        'https://www.w3.org/ns/did/v1',
+                        'https://w3id.org/security/multikey/v1',
+                        {
+                            toot: 'http://joinmastodon.org/ns#',
+                            value: 'schema:value',
+                            schema: 'http://schema.org#',
+                            featured: {
+                                '@id': 'toot:featured',
+                                '@type': '@id'
+                            },
+                            memorial: 'toot:memorial',
+                            indexable: 'toot:indexable',
+                            suspended: 'toot:suspended',
+                            discoverable: 'toot:discoverable',
+                            featuredTags: {
+                                '@id': 'toot:featuredTags',
+                                '@type': '@id'
+                            },
+                            PropertyValue: 'schema:PropertyValue',
+                            manuallyApprovesFollowers: 'as:manuallyApprovesFollowers'
+                        }
+                    ],
+                    featured: 'https://foo.bar/users/foobarbaz/collections/featured',
+                    endpoints: {
+                        type: 'as:Endpoints',
+                        sharedInbox: 'https:/foo.bar/inbox'
+                    },
+                    followers: 'https://foo.bar/users/foobarbaz/followers',
+                    following: 'https://foo.bar/users/foobarbaz/following',
+                    publicKey: {
+                        id: 'https://foo.bar/users/foobarbaz#main-key',
+                        type: 'CryptographicKey',
+                        owner: 'https://foo.bar/users/foobarbaz',
+                        publicKeyPem: 'abc123'
+                    },
+                    published: new Date().toISOString(),
+                    discoverable: false,
+                    featuredTags: 'https://foo.bar/users/foobarbaz/collections/tags',
+                    preferredUsername: 'foobarbaz',
+                    manuallyApprovesFollowers: false
+                }
+            },
+            '@context': [
+                'https://www.w3.org/ns/activitystreams',
+                'https://w3id.org/security/data-integrity/v1',
+                {
+                    toot: 'http://joinmastodon.org/ns#',
+                    Emoji: 'toot:Emoji',
+                    Hashtag: 'as:Hashtag',
+                    sensitive: 'as:sensitive',
+                    ChatMessage: 'http://litepub.social/ns#ChatMessage',
+                    votersCount: 'toot:votersCount'
+                }
+            ],
+            published: new Date().toISOString()
+        };
+
+        setTextValue('');
+        showToast({
+            message: 'Reply sent',
+            type: 'success'
         });
+        if (onNewReply) {
+            onNewReply(fakeReply as unknown as Activity);
+        }
+
+        // await replyMutation.mutate({id: object.id, content: textValue}, {
+        //     onSuccess(activity: Activity) {
+        //         setTextValue('');
+        //         showToast({
+        //             message: 'Reply sent',
+        //             type: 'success'
+        //         });
+        //         if (onNewReply) {
+        //             onNewReply(activity);
+        //         }
+        //     }
+        // });
     }
 
     function handleChange(event: React.ChangeEvent<HTMLTextAreaElement>) {

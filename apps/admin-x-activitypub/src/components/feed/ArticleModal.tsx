@@ -1,8 +1,8 @@
 import React, {useEffect, useRef, useState} from 'react';
 
 import NiceModal, {useModal} from '@ebay/nice-modal-react';
-import {ActorProperties, ObjectProperties} from '@tryghost/admin-x-framework/api/activitypub';
 import {Button, Modal} from '@tryghost/admin-x-design-system';
+import {ObjectProperties} from '@tryghost/admin-x-framework/api/activitypub';
 import {useBrowseSite} from '@tryghost/admin-x-framework/api/site';
 
 import FeedItem from './FeedItem';
@@ -11,21 +11,35 @@ import APReplyBox from '../global/APReplyBox';
 import articleBodyStyles from '../articleBodyStyles';
 import {type Activity} from '../activities/ActivityItem';
 
-interface ArticleModalProps {
-    object: ObjectProperties;
-    actor: ActorProperties;
-    comments: Activity[];
-    focusReply: boolean;
-}
+const getContentAuthor = (activity: Activity) => {
+    const actor = activity.actor;
+    const attributedTo = activity.object.attributedTo;
+
+    if (!attributedTo) {
+        return actor;
+    }
+
+    if (typeof attributedTo === 'string') {
+        return actor;
+    }
+
+    if (Array.isArray(attributedTo)) {
+        const found = attributedTo.find(item => typeof item !== 'string');
+        if (found) {
+            return found;
+        } else {
+            return actor;
+        }
+    }
+
+    return attributedTo;
+};
 
 const ArticleBody: React.FC<{heading: string, image: string|undefined, html: string}> = ({heading, image, html}) => {
     const site = useBrowseSite();
     const siteData = site.data?.site;
-
     const iframeRef = useRef<HTMLIFrameElement>(null);
-
     const cssContent = articleBodyStyles(siteData?.url.replace(/\/$/, ''));
-
     const htmlContent = `
   <html>
   <head>
@@ -73,10 +87,15 @@ const FeedItemDivider: React.FC = () => (
     <div className="h-px bg-grey-200"></div>
 );
 
-const ArticleModal: React.FC<ArticleModalProps> = ({object, actor, comments, focusReply}) => {
+interface ArticleModalProps {
+    activity: Activity;
+    focusReply: boolean;
+    addReplyToActivity: (id: string, reply: Activity) => void;
+}
+
+const ArticleModal: React.FC<ArticleModalProps> = ({activity: initalActivity, focusReply, addReplyToActivity}) => {
     const MODAL_SIZE_SM = 640;
     const MODAL_SIZE_LG = 2800;
-    const [commentsState, setCommentsState] = useState(comments);
     const [isFocused, setFocused] = useState(focusReply ? 1 : 0);
     function setReplyBoxFocused(focused: boolean) {
         if (focused) {
@@ -85,47 +104,73 @@ const ArticleModal: React.FC<ArticleModalProps> = ({object, actor, comments, foc
             setFocused(0);
         }
     }
-
     const [modalSize, setModalSize] = useState<number>(MODAL_SIZE_SM);
     const modal = useModal();
 
-    // Navigation stack to navigate between comments - This could probably use a
-    // more robust solution, but for now, thanks to the fact modal.show() updates
-    // the existing modal instead of creating a new one (i think 😅) we can use
-    // a stack to navigate between comments pretty easily
-    //
-    // @TODO: Look into a more robust solution for navigation
-    const [navigationStack, setNavigationStack] = useState<[ObjectProperties, ActorProperties, Activity[]][]>([]);
+    const [rootActivity, setRootActivity] = useState(initalActivity);
+    const [activity, setActivity] = useState(initalActivity);
+    const [actor, setActor] = useState(getContentAuthor(initalActivity));
+    const [object, setObject] = useState(initalActivity.object);
+
+    useEffect(() => {
+        setActor(getContentAuthor(activity));
+        setObject(activity.object);
+    }, [activity]);
+
     const [canNavigateBack, setCanNavigateBack] = useState(false);
     const navigateBack = () => {
-        const [previousObject, previousActor, previousComments] = navigationStack.pop() ?? [];
+        const findParentActivity = (parentActivity: Activity, childActivity: Activity): Activity | null => {
+            if (parentActivity.object.id === childActivity.object.inReplyTo) {
+                return parentActivity;
+            }
 
-        if (navigationStack.length === 0) {
-            setCanNavigateBack(false);
-        }
+            for (const reply of parentActivity.object.replies) {
+                const foundParent = findParentActivity(reply, childActivity);
 
-        modal.show({
-            object: previousObject,
-            actor: previousActor,
-            comments: previousComments
-        });
+                if (foundParent) {
+                    return foundParent;
+                }
+            }
+
+            return null;
+        };
+
+        const parentActivity = findParentActivity(rootActivity, activity) || rootActivity;
+
+        setActivity(parentActivity);
+        setCanNavigateBack(parentActivity.id !== rootActivity.id);
     };
-    const navigateForward = (nextObject: ObjectProperties, nextActor: ActorProperties, nextComments: Activity[]) => {
+    const navigateForward = (nextActivity: Activity) => {
+        setActivity(nextActivity);
         setCanNavigateBack(true);
-        setNavigationStack([...navigationStack, [object, actor, commentsState]]);
-
-        modal.show({
-            object: nextObject,
-            actor: nextActor,
-            comments: nextComments
-        });
     };
+
     const toggleModalSize = () => {
         setModalSize(modalSize === MODAL_SIZE_SM ? MODAL_SIZE_LG : MODAL_SIZE_SM);
     };
 
-    function handleNewReply(activity: Activity) {
-        setCommentsState(prev => [activity].concat(prev));
+    function handleNewReply(newReply: Activity) {
+        addReplyToActivity(activity.object.id, newReply);
+
+        const addReplyToLocalActivity = (rootObject: ObjectProperties, reply: Activity) => {
+            if (rootObject.id === reply.object.inReplyTo) {
+                rootObject.replies.push(reply);
+                return true;
+            }
+
+            for (const comment of rootObject.replies) {
+                if (addReplyToLocalActivity(comment.object, reply)) {
+                    return true;
+                }
+            }
+
+            return false;
+        };
+
+        const newRootObject = {...rootActivity.object};
+
+        addReplyToLocalActivity(newRootObject, newReply);
+        setRootActivity({...rootActivity, object: newRootObject});
     }
 
     return (
@@ -159,7 +204,7 @@ const ArticleModal: React.FC<ArticleModalProps> = ({object, actor, comments, foc
                     <div className='mx-auto max-w-[580px] pb-16'>
                         <FeedItem
                             actor={actor}
-                            comments={comments}
+                            comments={object.replies}
                             layout='modal'
                             object={object}
                             type='Note'
@@ -170,8 +215,8 @@ const ArticleModal: React.FC<ArticleModalProps> = ({object, actor, comments, foc
                         <APReplyBox focused={isFocused} object={object} onNewReply={handleNewReply}/>
                         <FeedItemDivider />
 
-                        {commentsState.map((comment, index) => {
-                            const showDivider = index !== comments.length - 1;
+                        {object.replies.map((comment, index) => {
+                            const showDivider = index !== object.replies.length - 1;
                             const nestedComments = comment.object.replies ?? [];
                             const hasNestedComments = nestedComments.length > 0;
 
@@ -185,7 +230,7 @@ const ArticleModal: React.FC<ArticleModalProps> = ({object, actor, comments, foc
                                         object={comment.object}
                                         type='Note'
                                         onClick={() => {
-                                            navigateForward(comment.object, comment.actor, nestedComments);
+                                            navigateForward(comment);
                                         }}
                                         onCommentClick={() => {}}
                                     />
@@ -202,7 +247,7 @@ const ArticleModal: React.FC<ArticleModalProps> = ({object, actor, comments, foc
                                                 object={nestedComment.object}
                                                 type='Note'
                                                 onClick={() => {
-                                                    navigateForward(nestedComment.object, nestedComment.actor, nestedNestedComments);
+                                                    navigateForward(nestedComment);
                                                 }}
                                                 onCommentClick={() => {}}
                                             />

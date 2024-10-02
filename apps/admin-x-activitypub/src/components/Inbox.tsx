@@ -5,64 +5,30 @@ import MainNavigation from './navigation/MainNavigation';
 import NiceModal from '@ebay/nice-modal-react';
 import React, {useEffect, useRef, useState} from 'react';
 import {type Activity} from './activities/ActivityItem';
-import {ActorProperties, ObjectProperties} from '@tryghost/admin-x-framework/api/activitypub';
 import {Button, Heading, LoadingIndicator} from '@tryghost/admin-x-design-system';
 import {useActivitiesForUser} from '../hooks/useActivityPubQueries';
 
 interface InboxProps {}
 
 const Inbox: React.FC<InboxProps> = ({}) => {
-    const [, setArticleContent] = useState<ObjectProperties | null>(null);
-    const [, setArticleActor] = useState<ActorProperties | null>(null);
     const [layout, setLayout] = useState('inbox');
 
-    const {
-        data,
-        fetchNextPage,
-        hasNextPage,
-        isFetchingNextPage
-    } = useActivitiesForUser({
+    const {query, addReplyToActivity: addReplyToActivity} = useActivitiesForUser({
         handle: 'index',
         includeReplies: true,
         filter: {
             type: ['Create:Article', 'Create:Note', 'Announce:Note']
         }
     });
-
+    const {data, fetchNextPage, hasNextPage, isFetchingNextPage} = query;
     const activities = (data?.pages.flatMap(page => page.data) ?? []);
-
-    const handleViewContent = (object: ObjectProperties, actor: ActorProperties, comments: Activity[], focusReply = false) => {
-        setArticleContent(object);
-        setArticleActor(actor);
-        NiceModal.show(ArticleModal, {object, actor, comments, focusReply});
-    };
-
-    function getContentAuthor(activity: Activity) {
-        const actor = activity.actor;
-        const attributedTo = activity.object.attributedTo;
-
-        if (!attributedTo) {
-            return actor;
-        }
-
-        if (typeof attributedTo === 'string') {
-            return actor;
-        }
-
-        if (Array.isArray(attributedTo)) {
-            const found = attributedTo.find(item => typeof item !== 'string');
-            if (found) {
-                return found;
-            } else {
-                return actor;
-            }
-        }
-
-        return attributedTo;
-    }
 
     const handleLayoutChange = (newLayout: string) => {
         setLayout(newLayout);
+    };
+
+    const handleViewContent = (activity: Activity, focusReply = false) => {
+        NiceModal.show(ArticleModal, {activity, focusReply, addReplyToActivity});
     };
 
     // Intersection observer to fetch more activities when the user scrolls
@@ -104,11 +70,7 @@ const Inbox: React.FC<InboxProps> = ({}) => {
                                     <li
                                         key={activity.id}
                                         data-test-view-article
-                                        onClick={() => handleViewContent(
-                                            activity.object,
-                                            getContentAuthor(activity),
-                                            activity.object.replies
-                                        )}
+                                        onClick={() => handleViewContent(activity)}
                                     >
                                         <FeedItem
                                             actor={activity.actor}
@@ -116,12 +78,7 @@ const Inbox: React.FC<InboxProps> = ({}) => {
                                             layout={layout}
                                             object={activity.object}
                                             type={activity.type}
-                                            onCommentClick={() => handleViewContent(
-                                                activity.object,
-                                                getContentAuthor(activity),
-                                                activity.object.replies,
-                                                true
-                                            )}
+                                            onCommentClick={() => handleViewContent(activity, true)}
                                         />
                                         {index < activities.length - 1 && (
                                             <div className="h-px w-full bg-grey-200"></div>

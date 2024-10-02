@@ -221,8 +221,11 @@ export function useActivitiesForUser({
 }) {
     const siteUrl = useSiteUrl();
     const api = createActivityPubAPI(handle, siteUrl);
-    return useInfiniteQuery({
-        queryKey: [`activities:${JSON.stringify({handle, includeOwn, includeReplies, filter})}`],
+    const queryClient = useQueryClient();
+    const queryKey = [`activities:${JSON.stringify({handle, includeOwn, includeReplies, filter})}`];
+
+    const query = useInfiniteQuery({
+        queryKey,
         async queryFn({pageParam}: {pageParam?: string}) {
             return api.getActivities(includeOwn, includeReplies, filter, pageParam);
         },
@@ -230,6 +233,56 @@ export function useActivitiesForUser({
             return prevPage.nextCursor;
         }
     });
+
+    type Page = { data: Activity[] }
+    type PagedData = {
+        pages: Page[] | void[]
+    }
+
+    const addReplyToActivity = (id: string, reply: Activity) => {
+        queryClient.setQueryData(queryKey, (current: PagedData | undefined) => {
+            if (!current) {
+                return current;
+            }
+
+            const addReplyRecursively = (items: Activity[]): Activity[] => {
+                return items.map((item: Activity) => {
+                    if (item.object.id === id) {
+                        return {
+                            ...item,
+                            object: {
+                                ...item.object,
+                                replies: [reply, ...item.object.replies]
+                            }
+                        };
+                    } else if (item.object.replies) {
+                        return {
+                            ...item,
+                            object: {
+                                ...item.object,
+                                replies: addReplyRecursively(item.object.replies)
+                            }
+                        };
+                    }
+                    return item;
+                });
+            };
+
+            return {
+                ...current,
+                pages: current.pages
+                    .filter((page: Page | void): page is Page => page !== undefined)
+                    .map((page: Page) => {
+                        return {
+                            ...page,
+                            data: addReplyRecursively(page.data)
+                        };
+                    })
+            };
+        });
+    };
+
+    return {query, addReplyToActivity};
 }
 
 export function useSearchForUser(handle: string, query: string) {
